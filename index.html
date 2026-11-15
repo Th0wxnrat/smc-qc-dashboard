@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Motor Cover QC - Live Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f5f3; --surface: #ffffff; --line: #e3e2de;
+    --ink: #1b1b19; --ink-2: #55544f; --ink-3: #8a8983;
+    --good: #0b7a0b; --good-bg: #e6f4e6;
+    --bad: #c03030; --bad-bg: #fbeaea;
+    --warn: #8a6100; --warn-bg: #fff4d6;
+    --accent: #2f5fd0;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121211; --surface: #1c1c1a; --line: #2e2e2b;
+      --ink: #f0efe9; --ink-2: #b9b8b1; --ink-3: #85847e;
+      --good: #4cc44c; --good-bg: #173117;
+      --bad: #f07070; --bad-bg: #3a1a1a;
+      --warn: #e2b84a; --warn-bg: #332a12;
+      --accent: #8aa9ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); margin: 2px 0 0; font-size: 14px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0 0 12px; font-weight: 600; }
+  .card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .grid { display: grid; gap: 12px; }
+  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
+  .two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-bottom: 12px; }
+  @media (max-width: 760px) { .kpis { grid-template-columns: 1fr 1fr; } .two { grid-template-columns: minmax(0, 1fr); } }
+  .kpi .label { color: var(--ink-2); font-size: 13px; }
+  .kpi .value { font-size: 32px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 4px; }
+  .kpi .note { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .pill.good { color: var(--good); background: var(--good-bg); }
+  .pill.bad  { color: var(--bad);  background: var(--bad-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.muted { color: var(--ink-2); background: var(--bg); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .status-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+  .status-meta { color: var(--ink-3); font-size: 12px; text-align: right; margin-top: 4px; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--ink-3); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.num, th.num { text-align: right; }
+  tbody tr:last-child td { border-bottom: none; }
+  .scroll { overflow-x: auto; }
+
+  .rate { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .bar { width: 70px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--ink-2); border-radius: 3px; }
+
+  .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--line); vertical-align: middle; }
+  .color-tag { display: inline-flex; align-items: center; gap: 6px; }
+  .color-tag .chip { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--line); }
+
+  .latest { display: grid; grid-template-columns: 84px 1fr; gap: 16px; align-items: start; }
+  .latest .big-swatch { width: 84px; height: 84px; border-radius: 12px; border: 1px solid var(--line); }
+  .latest dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
+  .latest dt { color: var(--ink-3); font-size: 13px; }
+  .latest dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--ink-3); padding: 12px 0; }
+  footer { color: var(--ink-3); font-size: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Smart Motor Cover QC &amp; Sorting</h1>
+      <p class="sub">Live results from the conveyor · STM32 inspects &amp; sorts → ESP32 uploads → this page</p>
+    </div>
+    <div>
+      <div class="status-line">
+        <span id="dbPill" class="pill muted"><span class="dot"></span>Connecting…</span>
+        <span id="espPill" class="pill muted"><span class="dot"></span>ESP32: waiting</span>
+      </div>
+      <div id="espMeta" class="status-meta"></div>
+    </div>
+  </header>
+
+  <section class="grid kpis">
+    <div class="card kpi"><div class="label">Inspected</div><div class="value" id="kTotal">–</div><div class="note">all covers</div></div>
+    <div class="card kpi"><div class="label">PASS</div><div class="value" id="kPass">–</div><div class="note">color matches model</div></div>
+    <div class="card kpi"><div class="label">REJECT</div><div class="value" id="kReject">–</div><div class="note">wrong or unknown color</div></div>
+    <div class="card kpi"><div class="label">Pass rate</div><div class="value" id="kRate">–</div><div class="note" id="kLastTime">&nbsp;</div></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Latest cover</h2>
+      <div id="latest"><div class="empty">No covers inspected yet.</div></div>
+    </div>
+    <div class="card">
+      <h2>By model</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Model</th><th>Expected</th><th class="num">Pass</th><th class="num">Reject</th><th class="num">Pass rate</th></tr></thead>
+          <tbody id="modelBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Recent covers <span id="histNote" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Model</th><th>Expected</th><th>Detected</th><th>Sensor color</th>
+              <th class="num">R</th><th class="num">G</th><th class="num">B</th><th class="num">C</th>
+              <th class="num">Dist (cm)</th><th>QC</th></tr>
+        </thead>
+        <tbody id="histBody"><tr><td colspan="11" class="empty">No covers inspected yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    QC result is decided by color only. Distance (HC-SR04) is reported, not judged yet.
+    Times shown in Thailand time (UTC+7).
+  </footer>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, query, orderByChild, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCa_z1jrMIOSjA2X9DCIVACGj31wIIZRcg",
+  databaseURL: "https://smart-motor-cover-qc-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app"
+};
+
+const MODELS = { MODEL_A: "RED", MODEL_B: "BLUE", MODEL_C: "GREEN" };
+const COLOR_CHIP = { RED: "#d33a3a", GREEN: "#2f9e44", BLUE: "#2f5fd0", UNKNOWN: "transparent" };
+const HISTORY_ROWS = 20;
+const OFFLINE_AFTER_MS = 75 * 1000;   // ESP32 sends status every 30 s
+
+const db = getDatabase(initializeApp(firebaseConfig));
+const $ = (id) => document.getElementById(id);
+
+let serverOffset = 0;
+let espStatus = null;
+
+// ---------- helpers ----------
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmtTime(ms, withDate) {
+  if (typeof ms !== "number") return "–";
+  const opt = { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+  if (withDate) Object.assign(opt, { day: "2-digit", month: "short" });
+  return new Date(ms).toLocaleString("en-GB", opt);
+}
+function ago(ms) {
+  const s = Math.max(0, Math.round((Date.now() + serverOffset - ms) / 1000));
+  if (s < 60) return s + " s ago";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  return Math.round(s / 3600) + " h ago";
+}
+function pct(pass, total) { return total ? Math.round((pass / total) * 100) : null; }
+
+// RGB from the sensor -> a display color (scale so the strongest channel = 255)
+function sensorRgb(r, g, b) {
+  const m = Math.max(r || 0, g || 0, b || 0);
+  if (!m) return "transparent";
+  const k = 255 / m;
+  return `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`;
+}
+function colorTag(name) {
+  const chip = COLOR_CHIP[name] || "transparent";
+  return `<span class="color-tag"><span class="chip" style="background:${chip}"></span>${esc(name)}</span>`;
+}
+function qcPill(qc) {
+  return qc === "PASS"
+    ? `<span class="pill good">✓ PASS</span>`
+    : `<span class="pill bad">✕ REJECT</span>`;
+}
+function dist(v) { return typeof v === "number" ? v.toFixed(1) : "–"; }
+
+// ---------- renderers ----------
+function renderRecords(rows) {
+  const total = rows.length;
+  const pass = rows.filter((r) => r.qc === "PASS").length;
+  const reject = total - pass;
+  const rate = pct(pass, total);
+
+  $("kTotal").textContent = total;
+  $("kPass").textContent = pass;
+  $("kReject").textContent = reject;
+  $("kRate").textContent = rate === null ? "–" : rate + "%";
+
+  // per model
+  $("modelBody").innerHTML = Object.entries(MODELS).map(([model, expected]) => {
+    const mine = rows.filter((r) => r.model === model);
+    const p = mine.filter((r) => r.qc === "PASS").length;
+    const rj = mine.length - p;
+    const rt = pct(p, mine.length);
+    return `<tr>
+      <td>${esc(model)}</td>
+      <td>${colorTag(expected)}</td>
+      <td class="num">${p}</td>
+      <td class="num">${rj}</td>
+      <td class="num"><div class="rate">${rt === null ? "–" : rt + "%"}
+        <div class="bar"><span style="width:${rt ?? 0}%"></span></div></div></td>
+    </tr>`;
+  }).join("");
+
+  // latest
+  const last = rows[rows.length - 1];
+  if (!last) {
+    $("latest").innerHTML = `<div class="empty">No covers inspected yet.</div>`;
+    $("kLastTime").innerHTML = "&nbsp;";
+  } else {
+    $("kLastTime").textContent = "last: " + fmtTime(last.ts, true);
+    $("latest").innerHTML = `<div class="latest">
+      <div class="big-swatch" style="background:${sensorRgb(last.r, last.g, last.b)}" title="Color seen by the sensor"></div>
+      <dl>
+        <dt>Result</dt><dd>${qcPill(last.qc)}</dd>
+        <dt>Model</dt><dd>${esc(last.model)}</dd>
+        <dt>Expected</dt><dd>${colorTag(last.expected)}</dd>
+        <dt>Detected</dt><dd>${colorTag(last.detected)}</dd>
+        <dt>R G B C</dt><dd>${last.r} · ${last.g} · ${last.b} · ${last.c}</dd>
+        <dt>Distance</dt><dd>${dist(last.dist_cm)} cm</dd>
+        <dt>Time</dt><dd>${fmtTime(last.ts, true)}</dd>
+      </dl>
+    </div>`;
+  }
+
+  // history (newest first)
+  const recent = rows.slice(-HISTORY_ROWS).reverse();
+  $("histNote").textContent = total > HISTORY_ROWS ? `(latest ${HISTORY_ROWS} of ${total})` : "";
+  $("histBody").innerHTML = recent.length
+    ? recent.map((r) => `<tr>
+        <td>${fmtTime(r.ts, true)}</td>
+        <td>${esc(r.model)}</td>
+        <td>${colorTag(r.expected)}</td>
+        <td>${colorTag(r.detected)}</td>
+        <td><span class="swatch" style="background:${sensorRgb(r.r, r.g, r.b)}"></span></td>
+        <td class="num">${r.r}</td><td class="num">${r.g}</td><td class="num">${r.b}</td><td class="num">${r.c}</td>
+        <td class="num">${dist(r.dist_cm)}</td>
+        <td>${qcPill(r.qc)}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="11" class="empty">No covers inspected yet.</td></tr>`;
+}
+
+function renderEsp() {
+  const pill = $("espPill");
+  if (!espStatus || typeof espStatus.last_seen !== "number") {
+    pill.className = "pill muted";
+    pill.innerHTML = `<span class="dot"></span>ESP32: no data yet`;
+    $("espMeta").textContent = "";
+    return;
+  }
+  const age = Date.now() + serverOffset - espStatus.last_seen;
+  const online = age < OFFLINE_AFTER_MS;
+  pill.className = "pill " + (online ? "good" : "bad");
+  pill.innerHTML = `<span class="dot"></span>ESP32 ${online ? "ONLINE" : "OFFLINE"}`;
+  let meta = "last seen " + ago(espStatus.last_seen);
+  if (typeof espStatus.rssi === "number") meta += ` · Wi-Fi ${espStatus.rssi} dBm`;
+  if (espStatus.pending > 0) meta += ` · ${espStatus.pending} waiting to upload`;
+  $("espMeta").textContent = meta;
+}
+
+// ---------- live data ----------
+onValue(ref(db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; renderEsp(); });
+
+onValue(ref(db, ".info/connected"), (s) => {
+  const ok = s.val() === true;
+  $("dbPill").className = "pill " + (ok ? "good" : "warn");
+  $("dbPill").innerHTML = `<span class="dot"></span>${ok ? "Live" : "Reconnecting…"}`;
+});
+
+onValue(query(ref(db, "records"), orderByChild("ts")), (snap) => {
+  const rows = [];
+  snap.forEach((child) => { rows.push(child.val()); });
+  renderRecords(rows);
+}, (err) => {
+  $("histBody").innerHTML = `<tr><td colspan="11" class="empty">Cannot read data: ${esc(err.message)}</td></tr>`;
+});
+
+onValue(ref(db, "status"), (s) => { espStatus = s.val(); renderEsp(); });
+setInterval(renderEsp, 5000);
+</script>
+</body>
+</html>
